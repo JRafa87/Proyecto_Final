@@ -9,7 +9,6 @@ import os
 
 # ==========================
 # 1. Cargar Modelos y Artefactos
-# (Se mantiene igual a la última versión funcional)
 # ==========================
 @st.cache_resource 
 def load_model():
@@ -77,7 +76,7 @@ def preprocess_data(df, model_columns, le, scaler):
             try:
                 # 🟢 CORRECCIÓN: Normalizar la cadena antes de aplicar el transform.
                 # Esto convierte a minúsculas y quita espacios para evitar el error 'unseen labels'.
-                df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()
+                df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()  # Normalizar a minúsculas y quitar espacios
                 
                 # Aplicar el LabelEncoder entrenado
                 df_processed[col] = le.transform(df_processed[col])
@@ -326,6 +325,7 @@ def main():
 # ============================
 if __name__ == "__main__":
     main()
+
 
 
 
