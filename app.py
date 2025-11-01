@@ -63,8 +63,8 @@ def preprocess_data(df, model_columns, le, scaler):
         st.error(f"❌ Error de datos: Faltan las siguientes columnas requeridas por el modelo: {', '.join(missing_columns)}")
         return None
 
-    # Asegurarnos de que las columnas en los datos de entrada coincidan exactamente con las que el modelo espera
-    df_processed = df_processed[[col for col in model_columns if col in df_processed.columns]]
+    # Filtrar solo las columnas necesarias que el modelo espera
+    df_processed = df_processed[model_columns]
 
     # 2. Eliminación de duplicados y rellenado de nulos
     df_processed = df_processed.drop_duplicates()
@@ -109,7 +109,7 @@ def preprocess_data(df, model_columns, le, scaler):
 
 
 # ============================
-# 3. Simulaciones: Monte Carlo y What-If (Igual que antes)
+# 3. Simulaciones: Monte Carlo y What-If
 # ============================
 def monte_carlo_simulation(df_features, n_simulations=100, perturbation_range=(0.95, 1.05)):
     simulations = []
@@ -135,7 +135,7 @@ def what_if_simulation(df_features, perturbation_factor=1.10):
 
 
 # ============================
-# 4. Evaluación de Simulaciones (Igual que antes)
+# 4. Evaluación de Simulaciones
 # ============================
 def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, scaler, model_feature_columns):
     """
@@ -178,7 +178,7 @@ def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, s
     return scores, f1_scores
 
 # ============================
-# 5. Exportar Resultados a Excel (Igual que antes)
+# 5. Exportar Resultados a Excel
 # ============================
 def export_results_to_excel(df, filename="simulation_results.xlsx"):
     output = pd.ExcelWriter('temp.xlsx', engine='xlsxwriter')
@@ -193,7 +193,7 @@ def export_results_to_excel(df, filename="simulation_results.xlsx"):
     return data
 
 # ============================
-# 6. Función para Graficar Métricas (Igual que antes)
+# 6. Función para Graficar Métricas
 # ============================
 def plot_metrics(simulated_scores, simulated_f1):
     fig, ax = plt.subplots(1, 2, figsize=(14, 6))
@@ -217,7 +217,7 @@ def plot_metrics(simulated_scores, simulated_f1):
 
 
 # ============================
-# 7. Interfaz de Streamlit (Igual que antes)
+# 7. Interfaz de Streamlit
 # ============================
 def main():
     st.set_page_config(page_title="Predicción y Simulación de Renuncia", layout="wide")
@@ -329,6 +329,7 @@ def main():
 # ============================
 if __name__ == "__main__":
     main()
+
 
 
 
