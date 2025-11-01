@@ -31,7 +31,7 @@ def load_model():
             st.error("Error: La data de referencia debe contener la columna 'Attrition' para la evaluación.")
             return None, None, None, None, None
             
-        # Codificación de Attrition para evaluación (solución de error anterior)
+        # Solución al error 'invalid literal for int(): 'Yes''
         df_reference['Attrition'] = df_reference['Attrition'].replace({'Yes': 1, 'No': 0})
             
         true_labels_reference = df_reference['Attrition'].astype(int).copy()
@@ -48,64 +48,56 @@ def load_model():
 
 
 # ================================
-# 2. Funciones de Preprocesamiento (VERSIÓN CORREGIDA)
+# 2. Funciones de Preprocesamiento (VERSIÓN CORREGIDA FINAL)
 # ================================
 def preprocess_data(df, model_columns, le, scaler):
     """
-    Preprocesa los datos: codificación y escalado.
-    Incluye normalización para evitar errores de LabelEncoder.
+    Preprocesa los datos (cargados o simulados), aplicando codificación, normalización
+    y alineación estricta de columnas para el escalado.
     """
     df_processed = df.copy()
 
-    # 1. Validación y filtrado de columnas
+    # 1. Validación y Alineación de columnas
     missing_columns = set(model_columns) - set(df_processed.columns)
     if missing_columns:
         st.error(f"❌ Error de datos: Faltan las siguientes columnas requeridas por el modelo: {', '.join(missing_columns)}")
         return None
 
-    # Filtrar solo las columnas necesarias que el modelo espera
-    df_processed = df_processed[model_columns]
+    # Reducir y reordenar el DataFrame según el orden estricto de model_columns (CRÍTICO)
+    df_processed = df_processed[model_columns].copy()
 
     # 2. Eliminación de duplicados y rellenado de nulos
     df_processed = df_processed.drop_duplicates()
-    df_processed = df_processed.fillna(df_processed.mean(numeric_only=True))
+    numeric_cols_for_fillna = df_processed.select_dtypes(include=np.number).columns.tolist()
+    df_processed[numeric_cols_for_fillna] = df_processed[numeric_cols_for_fillna].fillna(df_processed[numeric_cols_for_fillna].mean())
 
     # 3. Codificación de variables categóricas
+    # La lista de columnas categóricas que deben ser CODIFICADAS
     categorical_cols = ['Gender', 'BusinessTravel', 'Department', 'EducationField', 'JobRole', 'MaritalStatus', 'OverTime']
     
     for col in categorical_cols:
         if col in df_processed.columns:
             try:
                 # Normalización: convertimos todo a minúsculas y quitamos espacios
-                df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()  # Normalización
+                df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()
                 
-                # Reentrenar el LabelEncoder si la columna no está alineada con las clases
-                if set(df_processed[col].unique()) != set(le.classes_):
-                    le.fit(df_processed[col])  # Reentrenar el LabelEncoder si es necesario
-
                 # Aplicar el LabelEncoder entrenado
                 df_processed[col] = le.transform(df_processed[col])
             except ValueError as e:
-                # Si el error persiste, significa que la data está fuera del LabelEncoder
-                st.error(f"Error en la codificación de la columna '{col}'. Asegúrate de que todos los valores categóricos están presentes en el LabelEncoder. Error: {e}")
+                st.error(f"Error en la codificación de la columna '{col}'. Asegúrate de que todos los valores categóricos están presentes y normalizados. Error: {e}")
                 return None
     
-    # 4. Escalado de las variables numéricas
-    numeric_columns = ['Age', 'DailyRate', 'DistanceFromHome', 'HourlyRate', 'JobLevel', 'MonthlyIncome', 'MonthlyRate', 
-                       'NumCompaniesWorked', 'PercentSalaryHike', 'PerformanceRating', 'RelationshipSatisfaction', 
-                       'StockOptionLevel', 'TotalWorkingYears', 'TrainingTimesLastYear', 'WorkLifeBalance', 
-                       'YearsAtCompany', 'YearsInCurrentRole', 'YearsSinceLastPromotion', 'YearsWithCurrManager', 
-                       'IntencionPermanencia', 'CargaLaboralPercibida', 'SatisfaccionSalarial', 'ConfianzaEmpresa', 
-                       'NumeroTardanzas', 'NumeroFaltas']
-    
-    # Filtrar solo las columnas numéricas necesarias
-    cols_to_scale = [col for col in numeric_columns if col in df_processed.columns]
+    # 4. Escalado (Aplicado a TODAS las 36 features, que ahora son numéricas/codificadas)
+    # CRÍTICO: El DataFrame debe tener el orden exacto de model_columns.
+    df_to_scale = df_processed[model_columns] 
 
     try:
-        # Escalado solo de las columnas que el scaler espera
-        df_processed[cols_to_scale] = scaler.transform(df_processed[cols_to_scale])
+        # El scaler.transform espera todas las 36 features en el orden exacto.
+        df_processed[model_columns] = scaler.transform(df_to_scale)
+        
     except Exception as e:
-        st.error(f"Error durante el escalado de datos: {e}")
+        st.error(f"Error durante el escalado de datos (Feature Match Error): {e}")
+        st.warning("El error indica que el orden o nombre de las columnas NO coincide con el 'scaler.pkl'. Por favor, verifica el orden en 'model_feature_columns' en main().")
         return None
 
     return df_processed
@@ -124,6 +116,7 @@ def monte_carlo_simulation(df_features, n_simulations=100, perturbation_range=(0
         for col in key_cols:
             if col in df_sim.columns:
                 perturbation_factor = np.random.uniform(perturbation_range[0], perturbation_range[1], len(df_sim))
+                # Aplicamos la perturbación solo a las columnas numéricas que se van a simular
                 df_sim[col] = df_sim[col] * perturbation_factor
         
         simulations.append(df_sim)
@@ -151,7 +144,7 @@ def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, s
     true_labels = true_labels_reference.values.astype(int) 
 
     for sim_data in simulated_datasets:
-        # La data simulada ya contiene solo FEATURES, se preprocesa directamente
+        # La data simulada pasa por el preprocesamiento
         sim_data_processed = preprocess_data(sim_data, model_feature_columns, le, scaler)
         
         if sim_data_processed is None:
@@ -222,7 +215,7 @@ def plot_metrics(simulated_scores, simulated_f1):
 
 
 # ============================
-# 7. Interfaz de Streamlit
+# 7. Interfaz de Streamlit (Alineación de Columnas)
 # ============================
 def main():
     st.set_page_config(page_title="Predicción y Simulación de Renuncia", layout="wide")
@@ -233,8 +226,20 @@ def main():
     if model is None:
         return 
 
-    model_feature_columns = list(df_reference_features.columns)
-
+    # 🟢 CRÍTICO: Definición explícita de las 36 features en el ORDEN EXACTO de entrenamiento.
+    # ESTO DEBE COINCIDIR CON EL ORDEN DEL 'scaler.pkl'.
+    model_feature_columns = [
+        'Age', 'BusinessTravel', 'DailyRate', 'Department', 'DistanceFromHome',
+        'Education', 'EducationField', 'EnvironmentSatisfaction', 'Gender', 'HourlyRate',
+        'JobInvolvement', 'JobLevel', 'JobRole', 'JobSatisfaction', 'MaritalStatus',
+        'MonthlyIncome', 'MonthlyRate', 'NumCompaniesWorked', 'OverTime', 'PercentSalaryHike',
+        'PerformanceRating', 'RelationshipSatisfaction', 'StockOptionLevel', 'TotalWorkingYears',
+        'TrainingTimesLastYear', 'WorkLifeBalance', 'YearsAtCompany', 'YearsInCurrentRole',
+        'YearsSinceLastPromotion', 'YearsWithCurrManager',
+        'IntencionPermanencia', 'CargaLaboralPercibida', 'SatisfaccionSalarial', 
+        'ConfianzaEmpresa', 'NumeroTardanzas', 'NumeroFaltas' 
+    ]
+    
     # --- Columna para la carga de archivos y Predicción ---
     uploaded_file = st.file_uploader("Sube un archivo CSV o Excel (.csv, .xlsx) para PREDICCIÓN", type=["csv", "xlsx"])
     
@@ -252,6 +257,8 @@ def main():
 
         df_original = df.copy() 
         df_features_uploaded = df_original.drop(columns=['Attrition'], errors='ignore').copy()
+        
+        # Se llama a preprocess_data con la lista estricta de columnas
         processed_df = preprocess_data(df_features_uploaded, model_feature_columns, le, scaler)
         
         if processed_df is None:
@@ -262,16 +269,16 @@ def main():
         
         if st.button("🚀 Ejecutar Predicción y Evaluación"):
             st.info("Ejecutando el modelo sobre los datos cargados...")
-
+            
             probabilidad_renuncia = model.predict_proba(processed_df)[:, 1]
             predictions = (probabilidad_renuncia > 0.5).astype(int)
-
+            
             df_original['Prediction_Renuncia'] = predictions
             df_original['Probabilidad_Renuncia'] = probabilidad_renuncia
 
             if 'Attrition' in df_original.columns:
                 true_labels_uploaded = df_original['Attrition'].replace({'Yes': 1, 'No': 0}).astype(int)
-
+                
                 acc = accuracy_score(true_labels_uploaded, predictions)
                 f1 = f1_score(true_labels_uploaded, predictions)
                 st.success("✅ Predicción y Evaluación de datos cargados Completadas!")
@@ -300,6 +307,7 @@ def main():
             
             simulations = monte_carlo_simulation(df_reference_features)
             
+            # Se llama a evaluate_simulations, que a su vez llama a preprocess_data
             simulated_scores, simulated_f1 = evaluate_simulations(
                 simulations, true_labels_reference, model, le, scaler, model_feature_columns
             )
@@ -317,6 +325,7 @@ def main():
 
             simulations = what_if_simulation(df_reference_features)
             
+            # Se llama a evaluate_simulations, que a su vez llama a preprocess_data
             simulated_scores, simulated_f1 = evaluate_simulations(
                 simulations, true_labels_reference, model, le, scaler, model_feature_columns
             )
@@ -331,7 +340,6 @@ def main():
 # ============================
 if __name__ == "__main__":
     main()
-
 
 
 
