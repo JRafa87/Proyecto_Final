@@ -94,8 +94,11 @@ def preprocess_data(df, model_columns, le, scaler):
     numeric_columns = ['Age', 'DailyRate', 'DistanceFromHome', 'HourlyRate', 'JobLevel', 'MonthlyIncome', 'MonthlyRate', 
                        'NumCompaniesWorked', 'PercentSalaryHike', 'PerformanceRating', 'RelationshipSatisfaction', 
                        'StockOptionLevel', 'TotalWorkingYears', 'TrainingTimesLastYear', 'WorkLifeBalance', 
-                       'YearsAtCompany', 'YearsInCurrentRole', 'YearsSinceLastPromotion', 'YearsWithCurrManager']
+                       'YearsAtCompany', 'YearsInCurrentRole', 'YearsSinceLastPromotion', 'YearsWithCurrManager', 
+                       'IntencionPermanencia', 'CargaLaboralPercibida', 'SatisfaccionSalarial', 'ConfianzaEmpresa', 
+                       'NumeroTardanzas', 'NumeroFaltas']
     
+    # Filtrar solo las columnas numéricas necesarias
     cols_to_scale = [col for col in numeric_columns if col in df_processed.columns]
 
     try:
@@ -177,6 +180,7 @@ def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, s
 
     return scores, f1_scores
 
+
 # ============================
 # 5. Exportar Resultados a Excel
 # ============================
@@ -192,8 +196,9 @@ def export_results_to_excel(df, filename="simulation_results.xlsx"):
     
     return data
 
+
 # ============================
-# 6. Función para Graficar Métricas
+# 6. Función para Graficar
 # ============================
 def plot_metrics(simulated_scores, simulated_f1):
     fig, ax = plt.subplots(1, 2, figsize=(14, 6))
@@ -257,16 +262,16 @@ def main():
         
         if st.button("🚀 Ejecutar Predicción y Evaluación"):
             st.info("Ejecutando el modelo sobre los datos cargados...")
-            
+
             probabilidad_renuncia = model.predict_proba(processed_df)[:, 1]
             predictions = (probabilidad_renuncia > 0.5).astype(int)
-            
+
             df_original['Prediction_Renuncia'] = predictions
             df_original['Probabilidad_Renuncia'] = probabilidad_renuncia
-            
+
             if 'Attrition' in df_original.columns:
                 true_labels_uploaded = df_original['Attrition'].replace({'Yes': 1, 'No': 0}).astype(int)
-                
+
                 acc = accuracy_score(true_labels_uploaded, predictions)
                 f1 = f1_score(true_labels_uploaded, predictions)
                 st.success("✅ Predicción y Evaluación de datos cargados Completadas!")
@@ -291,7 +296,6 @@ def main():
 
     if simulation_option == "Monte Carlo":
         if st.button("▶️ Ejecutar Simulación Monte Carlo (100 Repeticiones)"):
-
             st.info("Simulando Monte Carlo sobre la data de referencia (perturbación aleatoria en Edad, Ingresos, Antigüedad)...")
             
             simulations = monte_carlo_simulation(df_reference_features)
@@ -309,9 +313,8 @@ def main():
     elif simulation_option == "What-If":
         st.markdown("Simula el impacto de un **aumento salarial del 10%** en la predicción de renuncia sobre la data de referencia.")
         if st.button("▶️ Ejecutar Simulación What-If (Aumento Salarial)"):
-
             st.info("Simulando escenario 'What-If'...")
-            
+
             simulations = what_if_simulation(df_reference_features)
             
             simulated_scores, simulated_f1 = evaluate_simulations(
@@ -323,12 +326,12 @@ def main():
                 st.markdown(f"**Impacto: Accuracy con +10% Salario:** `{simulated_scores[0]:.4f}`")
                 st.markdown(f"**Impacto: F1-score con +10% Salario:** `{simulated_f1[0]:.4f}`")
 
-
 # ============================
 # Inicio de la Aplicación
 # ============================
 if __name__ == "__main__":
     main()
+
 
 
 
