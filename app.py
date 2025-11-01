@@ -127,7 +127,32 @@ def export_results_to_excel(df, simulated_scores, simulated_f1, filename="simula
 
 
 # ============================
-# 6. Interfaz de Streamlit
+# 6. Función para Graficar Métricas
+# ============================
+def plot_metrics(simulated_scores, simulated_f1):
+    """
+    Plotea las métricas de las simulaciones: Accuracy y F1-score.
+    """
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+
+    # Graficar Accuracy
+    ax[0].hist(simulated_scores, bins=10, color='skyblue', edgecolor='black')
+    ax[0].set_title('Distribución de Accuracy')
+    ax[0].set_xlabel('Accuracy')
+    ax[0].set_ylabel('Frecuencia')
+
+    # Graficar F1-score
+    ax[1].hist(simulated_f1, bins=10, color='lightcoral', edgecolor='black')
+    ax[1].set_title('Distribución de F1-score')
+    ax[1].set_xlabel('F1-score')
+    ax[1].set_ylabel('Frecuencia')
+
+    plt.tight_layout()
+    st.pyplot(fig)
+
+
+# ============================
+# 7. Interfaz de Streamlit
 # ============================
 def main():
     # Título de la aplicación
@@ -148,10 +173,10 @@ def main():
         'CargaLaboralPercibida', 'SatisfaccionSalarial', 'ConfianzaEmpresa', 'NumeroTardanzas', 'NumeroFaltas'
     ]
 
-    # Opción para cargar el archivo o generar datos simulados
+    # Opción para cargar el archivo
     uploaded_file = st.file_uploader("Sube un archivo CSV o Excel", type=["csv", "xlsx"])
     if uploaded_file:
-        df = load_data(uploaded_file)
+        df = pd.read_csv(uploaded_file)  # Cargar el archivo como DataFrame
         st.write("Datos cargados:", df)
 
         # Verificación de columnas faltantes antes de ejecutar cualquier simulación
@@ -159,11 +184,28 @@ def main():
         if processed_df is None:
             return  # Detener ejecución si faltan columnas
 
-        # Mostrar botón para ejecutar Monte Carlo o What-If
+        # Mostrar opción para predecir con los datos cargados
+        if st.button("Predecir con Datos Cargados"):  # Botón para ejecutar el modelo con los datos cargados
+            st.write("Ejecutando el modelo sobre los datos cargados...")
+            probabilidad_renuncia = model.predict_proba(processed_df)[:, 1]
+            predictions = (probabilidad_renuncia > 0.5).astype(int)  # Umbral de 0.5 para clasificación binaria
+            st.write("Predicciones de Renuncia: ", predictions)
+
+            # Evaluar el modelo
+            acc = accuracy_score(df['Attrition'], predictions)
+            f1 = f1_score(df['Attrition'], predictions)
+            st.write(f"Accuracy: {acc}")
+            st.write(f"F1-score: {f1}")
+
+            # Opción para descargar los resultados
+            output_file = export_results_to_excel(df, [acc]*len(df), [f1]*len(df))
+            st.download_button("Descargar Resultados de Predicción", data=open(output_file, "rb").read(), file_name="predicciones_resultados.xlsx")
+
+        # Mostrar opción para ejecutar Monte Carlo o What-If
         simulation_option = st.radio("Selecciona tipo de simulación:", ["Monte Carlo", "What-If"])
 
         if simulation_option == "Monte Carlo":
-            if st.button("Ejecutar Monte Carlo"):
+            if st.button("Ejecutar Monte Carlo"):  # Botón para ejecutar Monte Carlo
                 st.write("Simulando Monte Carlo...")
                 simulations = monte_carlo_simulation(df)
                 simulated_scores, simulated_f1 = evaluate_simulations(simulations, df['Attrition'], model, le, scaler, model_columns)
@@ -174,7 +216,7 @@ def main():
                 st.download_button("Descargar Resultados de Monte Carlo", data=open(output_file, "rb").read(), file_name="monte_carlo_results.xlsx")
 
         elif simulation_option == "What-If":
-            if st.button("Ejecutar What-If"):
+            if st.button("Ejecutar What-If"):  # Botón para ejecutar What-If
                 st.write("Simulando What-If...")
                 simulations = what_if_simulation(df)
                 simulated_scores, simulated_f1 = evaluate_simulations(simulations, df['Attrition'], model, le, scaler, model_columns)
@@ -187,3 +229,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
