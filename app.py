@@ -48,11 +48,11 @@ def load_model():
 
 
 # ================================
-# 2. Funciones de Preprocesamiento (VERSIÓN CORREGIDA FINAL)
+# 2. Funciones de Preprocesamiento (VERSIÓN CORREGIDA DE ALINEACIÓN DE CASO)
 # ================================
 def preprocess_data(df, model_columns, le, scaler):
     """
-    Preprocesa los datos (cargados o simulados), aplicando codificación, normalización
+    Preprocesa los datos, aplicando codificación, normalización
     y alineación estricta de columnas para el escalado.
     """
     df_processed = df.copy()
@@ -63,7 +63,7 @@ def preprocess_data(df, model_columns, le, scaler):
         st.error(f"❌ Error de datos: Faltan las siguientes columnas requeridas por el modelo: {', '.join(missing_columns)}")
         return None
 
-    # Reducir y reordenar el DataFrame según el orden estricto de model_columns (CRÍTICO)
+    # CRÍTICO: Reordenar el DataFrame según el orden estricto de model_columns
     df_processed = df_processed[model_columns].copy()
 
     # 2. Eliminación de duplicados y rellenado de nulos
@@ -72,32 +72,38 @@ def preprocess_data(df, model_columns, le, scaler):
     df_processed[numeric_cols_for_fillna] = df_processed[numeric_cols_for_fillna].fillna(df_processed[numeric_cols_for_fillna].mean())
 
     # 3. Codificación de variables categóricas
-    # La lista de columnas categóricas que deben ser CODIFICADAS
     categorical_cols = ['Gender', 'BusinessTravel', 'Department', 'EducationField', 'JobRole', 'MaritalStatus', 'OverTime']
     
     for col in categorical_cols:
         if col in df_processed.columns:
             try:
-                # Normalización: convertimos todo a minúsculas y quitamos espacios
-                df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()
+                # 🟢 CORRECCIÓN ROBUSTA: Normalizamos a minúsculas, quitamos espacios, y luego capitalizamos.
+                # Esto convierte ' male ' o 'FEMALE' a 'Male' o 'Female'.
+                normalized_series = df_processed[col].astype(str).str.strip().str.lower().str.capitalize()
+                
+                df_processed[col] = normalized_series
                 
                 # Aplicar el LabelEncoder entrenado
                 df_processed[col] = le.transform(df_processed[col])
             except ValueError as e:
+                # Si el error es 'y contains previously unseen labels: 'female'', la siguiente línea es la solución:
                 st.error(f"Error en la codificación de la columna '{col}'. Asegúrate de que todos los valores categóricos están presentes y normalizados. Error: {e}")
+                
+                # ⚠️ SUGERENCIA DE DEPURACIÓN RÁPIDA: 
+                # Si el error de 'female' persiste, reemplace la línea de normalización anterior por esta:
+                # df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()
+                
                 return None
     
     # 4. Escalado (Aplicado a TODAS las 36 features, que ahora son numéricas/codificadas)
-    # CRÍTICO: El DataFrame debe tener el orden exacto de model_columns.
     df_to_scale = df_processed[model_columns] 
 
     try:
-        # El scaler.transform espera todas las 36 features en el orden exacto.
         df_processed[model_columns] = scaler.transform(df_to_scale)
         
     except Exception as e:
         st.error(f"Error durante el escalado de datos (Feature Match Error): {e}")
-        st.warning("El error indica que el orden o nombre de las columnas NO coincide con el 'scaler.pkl'. Por favor, verifica el orden en 'model_feature_columns' en main().")
+        st.warning("El error indica que el orden o nombre de las columnas NO coincide con el 'scaler.pkl'.")
         return None
 
     return df_processed
@@ -116,7 +122,6 @@ def monte_carlo_simulation(df_features, n_simulations=100, perturbation_range=(0
         for col in key_cols:
             if col in df_sim.columns:
                 perturbation_factor = np.random.uniform(perturbation_range[0], perturbation_range[1], len(df_sim))
-                # Aplicamos la perturbación solo a las columnas numéricas que se van a simular
                 df_sim[col] = df_sim[col] * perturbation_factor
         
         simulations.append(df_sim)
@@ -135,8 +140,7 @@ def what_if_simulation(df_features, perturbation_factor=1.10):
 # ============================
 def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, scaler, model_feature_columns):
     """
-    Evalúa el rendimiento de las simulaciones comparando las predicciones
-    con las etiquetas verdaderas de la data de REFERENCIA.
+    Evalúa el rendimiento de las simulaciones.
     """
     scores = []
     f1_scores = []
@@ -155,7 +159,7 @@ def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, s
         probabilidad_renuncia = model.predict_proba(sim_data_processed)[:, 1]
         predictions = (probabilidad_renuncia > 0.5).astype(int)
         
-        # Evaluación: Predicciones de la simulación vs. Etiquetas de REFERENCIA
+        # Evaluación
         try:
             if len(predictions) != len(true_labels):
                 st.error(f"Error de simulación: El número de filas simuladas ({len(predictions)}) no coincide con las etiquetas de referencia ({len(true_labels)}).")
@@ -227,7 +231,6 @@ def main():
         return 
 
     # 🟢 CRÍTICO: Definición explícita de las 36 features en el ORDEN EXACTO de entrenamiento.
-    # ESTO DEBE COINCIDIR CON EL ORDEN DEL 'scaler.pkl'.
     model_feature_columns = [
         'Age', 'BusinessTravel', 'DailyRate', 'Department', 'DistanceFromHome',
         'Education', 'EducationField', 'EnvironmentSatisfaction', 'Gender', 'HourlyRate',
@@ -307,7 +310,6 @@ def main():
             
             simulations = monte_carlo_simulation(df_reference_features)
             
-            # Se llama a evaluate_simulations, que a su vez llama a preprocess_data
             simulated_scores, simulated_f1 = evaluate_simulations(
                 simulations, true_labels_reference, model, le, scaler, model_feature_columns
             )
@@ -325,7 +327,6 @@ def main():
 
             simulations = what_if_simulation(df_reference_features)
             
-            # Se llama a evaluate_simulations, que a su vez llama a preprocess_data
             simulated_scores, simulated_f1 = evaluate_simulations(
                 simulations, true_labels_reference, model, le, scaler, model_feature_columns
             )
