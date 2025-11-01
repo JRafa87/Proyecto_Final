@@ -71,15 +71,20 @@ def preprocess_data(df, model_columns, le, scaler):
 
     # 3. Codificación de variables categóricas
     categorical_cols = ['Gender', 'BusinessTravel', 'Department', 'EducationField', 'JobRole', 'MaritalStatus', 'OverTime']
+    
+    # Normalización de las columnas categóricas (minúsculas y sin espacios)
     for col in categorical_cols:
         if col in df_processed.columns:
             try:
-                # 🟢 CORRECCIÓN: Normalizar la cadena antes de aplicar el transform.
-                # Esto convierte a minúsculas y quita espacios para evitar el error 'unseen labels'.
-                df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()  # Normalizar a minúsculas y quitar espacios
+                # Normalización: convertimos todo a minúsculas y quitamos espacios
+                df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()  # Normalización
                 
                 # Aplicar el LabelEncoder entrenado
-                df_processed[col] = le.transform(df_processed[col])
+                if col in le.classes_:
+                    df_processed[col] = le.transform(df_processed[col])
+                else:
+                    st.warning(f"⚠️ Columna {col} en los datos de entrada no se encuentra en el LabelEncoder.")
+                    return None
             except ValueError as e:
                 # Si el error persiste, significa que la data está fuera del LabelEncoder
                 st.error(f"Error en la codificación de la columna '{col}'. Asegúrate de que todos los valores categóricos están presentes en el LabelEncoder. Error: {e}")
@@ -202,129 +207,7 @@ def plot_metrics(simulated_scores, simulated_f1):
     ax[0].legend()
 
     ax[1].hist(simulated_f1, bins=10, color='lightcoral', edgecolor='black')
-    ax[1].set_title('Distribución de F1-score (Robustez)')
-    ax[1].set_xlabel('F1-score')
-    ax[1].set_ylabel('Frecuencia')
-    ax[1].axvline(np.mean(simulated_f1), color='red', linestyle='dashed', linewidth=1, label=f'Media: {np.mean(simulated_f1):.4f}')
-    ax[1].legend()
-
-    plt.tight_layout()
-    st.pyplot(fig)
-
-
-# ============================
-# 7. Interfaz de Streamlit
-# ============================
-def main():
-    st.set_page_config(page_title="Predicción y Simulación de Renuncia", layout="wide")
-    st.title("📊 Modelo de Predicción y Simulación de Renuncia de Empleados")
-    st.markdown("Carga tu archivo de datos para obtener predicciones. Las simulaciones usan una **data de referencia** cargada en el servidor para evaluación.")
-
-    model, le, scaler, df_reference_features, true_labels_reference = load_model()
-    if model is None:
-        return 
-
-    model_feature_columns = list(df_reference_features.columns)
-
-    # --- Columna para la carga de archivos y Predicción ---
-    uploaded_file = st.file_uploader("Sube un archivo CSV o Excel (.csv, .xlsx) para PREDICCIÓN", type=["csv", "xlsx"])
-    
-    if uploaded_file is not None:
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
-            st.info(f"✅ Archivo cargado correctamente. Total de filas: {len(df)}")
-            st.dataframe(df.head())
-        except Exception as e:
-            st.error(f"Error al leer el archivo: {e}")
-            return
-
-        df_original = df.copy() 
-        df_features_uploaded = df_original.drop(columns=['Attrition'], errors='ignore').copy()
-        processed_df = preprocess_data(df_features_uploaded, model_feature_columns, le, scaler)
-        
-        if processed_df is None:
-            st.error("No se puede continuar con la predicción debido a un error de preprocesamiento en el archivo cargado.")
-            return 
-
-        st.header("1. Predicción con Datos Cargados")
-        
-        if st.button("🚀 Ejecutar Predicción y Evaluación"):
-            st.info("Ejecutando el modelo sobre los datos cargados...")
-            
-            probabilidad_renuncia = model.predict_proba(processed_df)[:, 1]
-            predictions = (probabilidad_renuncia > 0.5).astype(int)
-            
-            df_original['Prediction_Renuncia'] = predictions
-            df_original['Probabilidad_Renuncia'] = probabilidad_renuncia
-            
-            if 'Attrition' in df_original.columns:
-                true_labels_uploaded = df_original['Attrition'].replace({'Yes': 1, 'No': 0}).astype(int)
-                
-                acc = accuracy_score(true_labels_uploaded, predictions)
-                f1 = f1_score(true_labels_uploaded, predictions)
-                st.success("✅ Predicción y Evaluación de datos cargados Completadas!")
-                st.metric(label="Accuracy (Datos Cargados)", value=f"{acc:.4f}")
-                st.metric(label="F1-score (Datos Cargados)", value=f"{f1:.4f}")
-            else:
-                st.warning("⚠️ El archivo cargado no tiene la columna 'Attrition'. Solo se muestran las predicciones.")
-                
-            st.download_button(
-                label="⬇️ Descargar Resultados de Predicción (Excel)",
-                data=export_results_to_excel(df_original),
-                file_name="predicciones_resultados.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-    # --- Separador y Opciones de Simulación ---
-    st.divider()
-    st.header("2. Análisis de Simulaciones (Robustez y Escenarios)")
-    st.markdown("Las simulaciones se basan en el **dataset de referencia** para garantizar la evaluación.")
-    
-    simulation_option = st.radio("Selecciona tipo de simulación:", ["Monte Carlo", "What-If"])
-
-    if simulation_option == "Monte Carlo":
-        if st.button("▶️ Ejecutar Simulación Monte Carlo (100 Repeticiones)"):
-            # Simulación Monte Carlo
-            st.info("Simulando Monte Carlo sobre la data de referencia...")
-            
-            simulations = monte_carlo_simulation(df_reference_features)
-            
-            simulated_scores, simulated_f1 = evaluate_simulations(
-                simulations, true_labels_reference, model, le, scaler, model_feature_columns, df_reference_features
-            )
-
-            if simulated_scores:
-                st.success("🎉 Simulación Monte Carlo Completada.")
-                st.markdown(f"**Robustez - Accuracy Media:** `{np.mean(simulated_scores):.4f}`")
-                st.markdown(f"**Robustez - F1-score Media:** `{np.mean(simulated_f1):.4f}`")
-                plot_metrics(simulated_scores, simulated_f1)
-                
-    elif simulation_option == "What-If":
-        st.markdown("Simula el impacto de un **aumento salarial del 10%** en la predicción de renuncia sobre la data de referencia.")
-        if st.button("▶️ Ejecutar Simulación What-If (Aumento Salarial)"):
-            # Simulación What-If
-            st.info("Simulando escenario 'What-If'...")
-
-            simulations = what_if_simulation(df_reference_features)
-            
-            simulated_scores, simulated_f1 = evaluate_simulations(
-                simulations, true_labels_reference, model, le, scaler, model_feature_columns, df_reference_features
-            )
-            
-            if simulated_scores:
-                st.success("🎉 Simulación What-If Completada.")
-                st.markdown(f"**Impacto: Accuracy con +10% Salario:** `{simulated_scores[0]:.4f}`")
-                st.markdown(f"**Impacto: F1-score con +10% Salario:** `{simulated_f1[0]:.4f}`")
-
-
-# ============================
-# Inicio de la Aplicación
-# ============================
-if __name__ == "__main__":
-    main()
+    ax[
 
 
 
