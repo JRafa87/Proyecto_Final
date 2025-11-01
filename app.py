@@ -48,12 +48,12 @@ def load_model():
 
 
 # ================================
-# 2. Funciones de Preprocesamiento (VERSIÓN FINAL: FORZAR MINÚSCULAS)
+# 2. Funciones de Preprocesamiento (VERSIÓN FINAL: AISLAMIENTO Categórico)
 # ================================
 def preprocess_data(df, model_columns, le, scaler):
     """
-    Preprocesa los datos, aplicando codificación, normalización
-    (a minúsculas) y alineación estricta de columnas para el escalado.
+    Preprocesa los datos, aplicando codificación solo a las 7 variables nominales,
+    y asegurando la alineación de columnas.
     """
     df_processed = df.copy()
 
@@ -71,26 +71,27 @@ def preprocess_data(df, model_columns, le, scaler):
     numeric_cols_for_fillna = df_processed.select_dtypes(include=np.number).columns.tolist()
     df_processed[numeric_cols_for_fillna] = df_processed[numeric_cols_for_fillna].fillna(df_processed[numeric_cols_for_fillna].mean())
 
-    # 3. Codificación de variables categóricas
-    categorical_cols = ['Gender', 'BusinessTravel', 'Department', 'EducationField', 'JobRole', 'MaritalStatus', 'OverTime']
+    # 3. Codificación de variables categóricas (SOLO LAS NOMINALES QUE REQUIEREN LE)
+    # AISLAMIENTO: Estas son las únicas 7 columnas categóricas nominales de tu lista.
+    nominal_categorical_cols = ['BusinessTravel', 'Department', 'EducationField', 'Gender', 'JobRole', 'MaritalStatus', 'OverTime']
     
-    for col in categorical_cols:
+    for col in nominal_categorical_cols:
         if col in df_processed.columns:
             try:
-                # 🟢 SOLUCIÓN: Normalizamos a minúsculas y quitamos espacios. 
-                # Esto es necesario para que la cadena coincida con la que el LabelEncoder.pkl fue entrenado.
-                normalized_series = df_processed[col].astype(str).str.strip().str.lower()
+                # Forzamos a MAYÚSCULAS (la forma más probable de que el encoder lo espere, dado los errores anteriores)
+                normalized_series = df_processed[col].astype(str).str.strip().str.upper() 
                 
                 df_processed[col] = normalized_series
                 
                 # Aplicar el LabelEncoder entrenado
                 df_processed[col] = le.transform(df_processed[col])
             except ValueError as e:
-                # Si el error es 'unseen labels', significa que el caso de normalización (minúsculas) no es el correcto.
-                st.error(f"Error en la codificación de la columna '{col}'. Asegúrate de que todos los valores categóricos están presentes y normalizados. Error: {e}")
+                # Si esto falla, el LabelEncoder no tiene el valor normalizado.
+                st.error(f"Error CRÍTICO en la codificación de la columna '{col}'. La cadena normalizada no existe en el LabelEncoder. Error: {e}")
+                st.warning("Prueba cambiar '.str.upper()' a '.str.lower()' o '.str.capitalize()' si el error persiste.")
                 return None
     
-    # 4. Escalado (Aplicado a TODAS las 36 features, que ahora son numéricas/codificadas)
+    # 4. Escalado (Aplicado a TODAS las 36 features)
     df_to_scale = df_processed[model_columns] 
 
     try:
@@ -226,6 +227,7 @@ def main():
         return 
 
     # 🟢 CRÍTICO: Definición explícita de las 36 features en el ORDEN EXACTO de entrenamiento.
+    # Esta lista incluye las 7 categóricas nominales y las 29 numéricas/ordinales.
     model_feature_columns = [
         'Age', 'BusinessTravel', 'DailyRate', 'Department', 'DistanceFromHome',
         'Education', 'EducationField', 'EnvironmentSatisfaction', 'Gender', 'HourlyRate',
