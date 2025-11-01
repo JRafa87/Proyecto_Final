@@ -48,12 +48,12 @@ def load_model():
 
 
 # ================================
-# 2. Funciones de Preprocesamiento (VERSIÓN CORREGIDA DE ALINEACIÓN DE CASO)
+# 2. Funciones de Preprocesamiento (VERSIÓN FINAL: FORZAR MINÚSCULAS)
 # ================================
 def preprocess_data(df, model_columns, le, scaler):
     """
     Preprocesa los datos, aplicando codificación, normalización
-    y alineación estricta de columnas para el escalado.
+    (a minúsculas) y alineación estricta de columnas para el escalado.
     """
     df_processed = df.copy()
 
@@ -77,22 +77,17 @@ def preprocess_data(df, model_columns, le, scaler):
     for col in categorical_cols:
         if col in df_processed.columns:
             try:
-                # 🟢 CORRECCIÓN ROBUSTA: Normalizamos a minúsculas, quitamos espacios, y luego capitalizamos.
-                # Esto convierte ' male ' o 'FEMALE' a 'Male' o 'Female'.
-                normalized_series = df_processed[col].astype(str).str.strip().str.lower().str.capitalize()
+                # 🟢 SOLUCIÓN: Normalizamos a minúsculas y quitamos espacios. 
+                # Esto es necesario para que la cadena coincida con la que el LabelEncoder.pkl fue entrenado.
+                normalized_series = df_processed[col].astype(str).str.strip().str.lower()
                 
                 df_processed[col] = normalized_series
                 
                 # Aplicar el LabelEncoder entrenado
                 df_processed[col] = le.transform(df_processed[col])
             except ValueError as e:
-                # Si el error es 'y contains previously unseen labels: 'female'', la siguiente línea es la solución:
+                # Si el error es 'unseen labels', significa que el caso de normalización (minúsculas) no es el correcto.
                 st.error(f"Error en la codificación de la columna '{col}'. Asegúrate de que todos los valores categóricos están presentes y normalizados. Error: {e}")
-                
-                # ⚠️ SUGERENCIA DE DEPURACIÓN RÁPIDA: 
-                # Si el error de 'female' persiste, reemplace la línea de normalización anterior por esta:
-                # df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()
-                
                 return None
     
     # 4. Escalado (Aplicado a TODAS las 36 features, que ahora son numéricas/codificadas)
