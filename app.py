@@ -13,9 +13,10 @@ import os
 @st.cache_resource 
 def load_model():
     """
-    Carga el modelo entrenado, el label encoder y el scaler.
+    Carga el modelo entrenado, el label encoder, el scaler y la data de referencia (features y etiquetas).
     """
     try:
+        # Cargar artefactos
         model = joblib.load('models/xgboost_model.pkl')
         le = joblib.load('models/label_encoder.pkl')
         scaler = joblib.load('models/scaler.pkl')
@@ -28,14 +29,22 @@ def load_model():
              
         df_reference = pd.read_csv(REFERENCE_DATA_PATH)
         
-        # Extraer las etiquetas verdaderas de la data de referencia
+        # Verificar la columna de etiquetas
         if 'Attrition' not in df_reference.columns:
             st.error("Error: La data de referencia debe contener la columna 'Attrition' para la evaluación.")
             return None, None, None, None, None
             
+        # CORRECCIÓN DE ERROR: Codificar 'Yes'/'No' a 1/0 ANTES de convertir a int.
+        # Esto soluciona el error 'invalid literal for int() with base 10: 'Yes''.
+        df_reference['Attrition'] = df_reference['Attrition'].replace({'Yes': 1, 'No': 0})
+            
+        # Extraemos las etiquetas verdaderas (que ya son 0 o 1)
         true_labels_reference = df_reference['Attrition'].astype(int).copy()
         
-        return model, le, scaler, df_reference.drop(columns=['Attrition'], errors='ignore'), true_labels_reference
+        # Devolvemos las features de referencia
+        df_reference_features = df_reference.drop(columns=['Attrition']).copy()
+
+        return model, le, scaler, df_reference_features, true_labels_reference
         
     except FileNotFoundError:
         st.error("Error: Archivos del modelo (xgboost_model.pkl, label_encoder.pkl, scaler.pkl) no encontrados. Asegúrate de que están en la carpeta 'models'.")
@@ -48,7 +57,6 @@ def load_model():
 # ================================
 # 2. Funciones de Preprocesamiento
 # ================================
-# MANTENEMOS ESTA FUNCIÓN IGUAL
 def preprocess_data(df, model_columns, le, scaler):
     """
     Preprocesa los datos: codificación y escalado.
@@ -74,6 +82,7 @@ def preprocess_data(df, model_columns, le, scaler):
     for col in categorical_cols:
         if col in df_processed.columns:
             try:
+                # Usamos el LabelEncoder general (le) para las features
                 df_processed[col] = le.transform(df_processed[col].astype(str))
             except ValueError as e:
                 st.error(f"Error en la codificación de la columna '{col}'. Asegúrate de que todos los valores categóricos están presentes en el LabelEncoder. Error: {e}")
@@ -99,40 +108,39 @@ def preprocess_data(df, model_columns, le, scaler):
 # ============================
 # 3. Simulaciones: Monte Carlo y What-If
 # ============================
-# MANTENEMOS ESTAS FUNCIONES IGUAL
-def monte_carlo_simulation(df, n_simulations=100, perturbation_range=(0.95, 1.05)):
+def monte_carlo_simulation(df_features, n_simulations=100, perturbation_range=(0.95, 1.05)):
+    """
+    Realiza simulaciones de Monte Carlo generando perturbaciones aleatorias 
+    sobre las variables clave del DataFrame de features de referencia.
+    """
     simulations = []
     key_cols = ['Age', 'MonthlyIncome', 'YearsAtCompany']
     
-    # Asegurar que el DataFrame tiene el mismo tamaño que la data de referencia
-    # para que la evaluación sea justa
-    n_rows = len(df) if len(df) > 0 else 1
-    
     for i in range(n_simulations):
-        # NOTA IMPORTANTE: Para que la evaluación funcione, los datos simulados
-        # deben tener el mismo número de filas que la data de referencia (true_labels_reference).
-        # Usamos la data de referencia para la simulación
-        df_sim = df.copy().head(n_rows)
+        df_sim = df_features.copy()
         
         for col in key_cols:
             if col in df_sim.columns:
                 perturbation_factor = np.random.uniform(perturbation_range[0], perturbation_range[1], len(df_sim))
                 df_sim[col] = df_sim[col] * perturbation_factor
         
-        df_sim['Simulation_ID'] = i + 1
         simulations.append(df_sim)
     return simulations
 
 
-def what_if_simulation(df, perturbation_factor=1.10):
-    df_sim = df.copy()
+def what_if_simulation(df_features, perturbation_factor=1.10):
+    """
+    Simula escenarios 'What-If' variando un parámetro clave (ej. aumentar el salario en un 10%) 
+    en el DataFrame de features de referencia.
+    """
+    df_sim = df_features.copy()
     if 'MonthlyIncome' in df_sim.columns:
         df_sim['MonthlyIncome'] *= perturbation_factor
     return [df_sim]
 
 
 # ===========================
-# 4. Evaluación de Simulaciones (VERSION FINAL: Usa Etiquetas de Referencia)
+# 4. Evaluación de Simulaciones
 # ===========================
 def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, scaler, model_feature_columns):
     """
@@ -142,27 +150,22 @@ def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, s
     scores = []
     f1_scores = []
     
-    # Asegurar que las etiquetas de referencia son las que se usan para la evaluación
     true_labels = true_labels_reference.values.astype(int) 
 
     for sim_data in simulated_datasets:
-        # 1. Aislar las FEATURES para preprocesamiento/predicción
-        sim_features_df = sim_data[model_feature_columns].copy()
-        
-        # 2. Preprocesar
-        sim_data_processed = preprocess_data(sim_features_df, model_feature_columns, le, scaler)
+        # 1. La data simulada ya contiene solo FEATURES, se preprocesa directamente
+        sim_data_processed = preprocess_data(sim_data, model_feature_columns, le, scaler)
         
         if sim_data_processed is None:
             st.warning("Preprocesamiento fallido en una simulación. Se detiene la evaluación.")
             return [], [] 
         
-        # 3. Predicción
+        # 2. Predicción
         probabilidad_renuncia = model.predict_proba(sim_data_processed)[:, 1]
         predictions = (probabilidad_renuncia > 0.5).astype(int)
         
-        # 4. Evaluación: Predicciones de la simulación vs. Etiquetas de REFERENCIA
+        # 3. Evaluación: Predicciones de la simulación vs. Etiquetas de REFERENCIA
         try:
-             # Solo evaluar si el número de predicciones coincide con el número de etiquetas de referencia
             if len(predictions) != len(true_labels):
                 st.error(f"Error de simulación: El número de filas simuladas ({len(predictions)}) no coincide con las etiquetas de referencia ({len(true_labels)}).")
                 return [], []
@@ -179,6 +182,52 @@ def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, s
 
     return scores, f1_scores
 
+# ============================
+# 5. Exportar Resultados a Excel
+# ============================
+def export_results_to_excel(df, filename="simulation_results.xlsx"):
+    """
+    Exporta los resultados de predicción a un archivo Excel.
+    """
+    output = pd.ExcelWriter('temp.xlsx', engine='xlsxwriter')
+    df.to_excel(output, sheet_name='Resultados', index=False)
+    output.close()
+    
+    with open('temp.xlsx', 'rb') as f:
+        data = f.read()
+    
+    os.remove('temp.xlsx')
+    
+    return data
+
+# ============================
+# 6. Función para Graficar Métricas
+# ============================
+def plot_metrics(simulated_scores, simulated_f1):
+    """
+    Plotea las métricas de las simulaciones: Accuracy y F1-score.
+    """
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+
+    # Graficar Accuracy
+    ax[0].hist(simulated_scores, bins=10, color='skyblue', edgecolor='black')
+    ax[0].set_title('Distribución de Accuracy (Robustez)')
+    ax[0].set_xlabel('Accuracy')
+    ax[0].set_ylabel('Frecuencia')
+    ax[0].axvline(np.mean(simulated_scores), color='red', linestyle='dashed', linewidth=1, label=f'Media: {np.mean(simulated_scores):.4f}')
+    ax[0].legend()
+
+    # Graficar F1-score
+    ax[1].hist(simulated_f1, bins=10, color='lightcoral', edgecolor='black')
+    ax[1].set_title('Distribución de F1-score (Robustez)')
+    ax[1].set_xlabel('F1-score')
+    ax[1].set_ylabel('Frecuencia')
+    ax[1].axvline(np.mean(simulated_f1), color='red', linestyle='dashed', linewidth=1, label=f'Media: {np.mean(simulated_f1):.4f}')
+    ax[1].legend()
+
+    plt.tight_layout()
+    st.pyplot(fig)
+
 
 # ============================
 # 7. Interfaz de Streamlit
@@ -186,7 +235,7 @@ def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, s
 def main():
     st.set_page_config(page_title="Predicción y Simulación de Renuncia", layout="wide")
     st.title("📊 Modelo de Predicción y Simulación de Renuncia de Empleados")
-    st.markdown("Carga tu archivo de datos para obtener predicciones. Las simulaciones usan una **data de referencia** cargada en el servidor.")
+    st.markdown("Carga tu archivo de datos para obtener predicciones. Las simulaciones usan una **data de referencia** cargada en el servidor para evaluación.")
 
     # Cargar todos los artefactos, incluyendo la Data de Referencia y Etiquetas
     model, le, scaler, df_reference_features, true_labels_reference = load_model()
@@ -214,6 +263,7 @@ def main():
         df_original = df.copy() 
         
         # 1. Preprocesamiento (Solo para la PREDICCIÓN en el archivo cargado)
+        # Nos aseguramos de NO pasar la columna Attrition si existe
         df_features_uploaded = df_original.drop(columns=['Attrition'], errors='ignore').copy()
         processed_df = preprocess_data(df_features_uploaded, model_feature_columns, le, scaler)
         
@@ -235,7 +285,9 @@ def main():
             
             # Evaluación (Solo si el archivo cargado tiene Attrition)
             if 'Attrition' in df_original.columns:
-                true_labels_uploaded = df_original['Attrition'].astype(int)
+                # Codificamos las etiquetas cargadas (si son 'Yes'/'No') para la evaluación
+                true_labels_uploaded = df_original['Attrition'].replace({'Yes': 1, 'No': 0}).astype(int)
+                
                 acc = accuracy_score(true_labels_uploaded, predictions)
                 f1 = f1_score(true_labels_uploaded, predictions)
                 st.success("✅ Predicción y Evaluación de datos cargados Completadas!")
@@ -244,8 +296,13 @@ def main():
             else:
                 st.warning("⚠️ El archivo cargado no tiene la columna 'Attrition'. Solo se muestran las predicciones.")
                 
-            # Descarga se mantiene igual
-            # st.download_button(...) # Aquí iría la descarga
+            # Opción para descargar los resultados de la predicción
+            st.download_button(
+                label="⬇️ Descargar Resultados de Predicción (Excel)",
+                data=export_results_to_excel(df_original),
+                file_name="predicciones_resultados.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
     # --- Separador y Opciones de Simulación ---
     st.divider()
