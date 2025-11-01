@@ -56,13 +56,14 @@ def preprocess_data(df, model_columns, le, scaler):
     Incluye normalización para evitar errores de LabelEncoder.
     """
     df_processed = df.copy()
-    
+
     # 1. Validación y filtrado de columnas
     missing_columns = set(model_columns) - set(df_processed.columns)
     if missing_columns:
         st.error(f"❌ Error de datos: Faltan las siguientes columnas requeridas por el modelo: {', '.join(missing_columns)}")
         return None
 
+    # Asegurarnos de que las columnas en los datos de entrada coincidan exactamente con las que el modelo espera
     df_processed = df_processed[[col for col in model_columns if col in df_processed.columns]]
 
     # 2. Eliminación de duplicados y rellenado de nulos
@@ -72,14 +73,13 @@ def preprocess_data(df, model_columns, le, scaler):
     # 3. Codificación de variables categóricas
     categorical_cols = ['Gender', 'BusinessTravel', 'Department', 'EducationField', 'JobRole', 'MaritalStatus', 'OverTime']
     
-    # Normalización de las columnas categóricas (minúsculas y sin espacios)
     for col in categorical_cols:
         if col in df_processed.columns:
             try:
                 # Normalización: convertimos todo a minúsculas y quitamos espacios
                 df_processed[col] = df_processed[col].astype(str).str.strip().str.lower()  # Normalización
                 
-                # Reentrenar LabelEncoder si la columna no está alineada con las clases
+                # Reentrenar el LabelEncoder si la columna no está alineada con las clases
                 if set(df_processed[col].unique()) != set(le.classes_):
                     le.fit(df_processed[col])  # Reentrenar el LabelEncoder si es necesario
 
@@ -97,8 +97,9 @@ def preprocess_data(df, model_columns, le, scaler):
                        'YearsAtCompany', 'YearsInCurrentRole', 'YearsSinceLastPromotion', 'YearsWithCurrManager']
     
     cols_to_scale = [col for col in numeric_columns if col in df_processed.columns]
-    
+
     try:
+        # Escalado solo de las columnas que el scaler espera
         df_processed[cols_to_scale] = scaler.transform(df_processed[cols_to_scale])
     except Exception as e:
         st.error(f"Error durante el escalado de datos: {e}")
@@ -175,7 +176,6 @@ def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, s
             return [], []
 
     return scores, f1_scores
-
 
 # ============================
 # 5. Exportar Resultados a Excel (Igual que antes)
@@ -329,6 +329,7 @@ def main():
 # ============================
 if __name__ == "__main__":
     main()
+
 
 
 
