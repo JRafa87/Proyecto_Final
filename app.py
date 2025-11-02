@@ -35,6 +35,7 @@ def load_model():
         df_reference['Attrition'] = df_reference['Attrition'].replace({'Yes': 1, 'No': 0})
 
         true_labels_reference = df_reference['Attrition'].astype(int).copy()
+        # df_reference_features ahora incluye todas las columnas EXCEPTO Attrition y se usará para el merge.
         df_reference_features = df_reference.drop(columns=['Attrition'], errors='ignore').copy()
         
         st.success("✅ Modelo y artefactos cargados correctamente.")
@@ -108,6 +109,7 @@ def monte_carlo_simulation(df_features, n_simulations=100, perturbation_range=(0
         df_sim = df_features.copy()
         for col in key_cols:
             if col in df_sim.columns:
+                # Asegurar que la perturbación se aplica solo a los valores en el DataFrame
                 perturbation_factor = np.random.uniform(perturbation_range[0], perturbation_range[1], len(df_sim))
                 df_sim[col] = df_sim[col] * perturbation_factor
         simulations.append(df_sim)
@@ -229,8 +231,127 @@ def plot_metrics(simulated_scores, simulated_f1):
     st.pyplot(fig)
 
 
+# ====================================
+# 7. Funciones de Análisis Ejecutivo
+# ====================================
+def display_executive_analysis(df_results, title_suffix="Predicha"):
+    st.markdown("---")
+    st.subheader(f"Análisis de Deserción {title_suffix}")
+
+    # --- 1. PORCENTAJE TOTAL DE DESERCIÓN (PREDICHO) ---
+    total_attrition_count = df_results['Prediction_Renuncia'].sum()
+    total_employees = len(df_results)
+    total_attrition_percentage = (total_attrition_count / total_employees) * 100
+
+    col_a, col_b = st.columns(2)
+    col_a.metric(
+        label=f"Porcentaje total de deserción ({title_suffix.lower()})", 
+        value=f"{total_attrition_percentage:.2f}%", 
+        delta=f"{total_attrition_count} empleados",
+        delta_color="off"
+    )
+    col_b.empty() # Columna de relleno
+
+    # --- 2. TOP 5 EMPLEADOS CON MAYOR RIESGO ---
+    st.markdown("---")
+    st.subheader("🚨 Top 5 Empleados con Mayor Riesgo de Deserción")
+
+    # Intentar usar EmployeeNumber o Index como clave
+    employee_key = 'EmployeeNumber' if 'EmployeeNumber' in df_results.columns else 'Index'
+
+    # Manejar caso donde EmployeeNumber no es una columna
+    df_temp = df_results.copy()
+    if employee_key == 'Index':
+        df_temp = df_temp.reset_index()
+        df_temp = df_temp.rename(columns={df_temp.columns[0]: 'Index'})
+        
+    # 2.1 Obtener los 5 empleados con mayor probabilidad
+    top_5_attrition = df_temp.sort_values(by='Probabilidad_Renuncia', ascending=False).head(5)
+
+    # 2.2 Seleccionar solo las columnas clave para mostrar
+    cols_to_display = [employee_key, 'Probabilidad_Renuncia', 'Department']
+    
+    top_5_display_cols = [col for col in cols_to_display if col in top_5_attrition.columns]
+    top_5_display = top_5_attrition[top_5_display_cols].copy()
+
+    # 2.3 Formatear la probabilidad para la tabla
+    top_5_display['Probabilidad_Renuncia'] = top_5_display['Probabilidad_Renuncia'].map('{:.4f}'.format)
+    
+    # 2.4 Renombrar columnas para la visualización
+    col_mapping = {
+        employee_key: 'ID Empleado',
+        'Probabilidad_Renuncia': 'Probabilidad de Renuncia',
+        'Department': 'Departamento'
+    }
+    top_5_display = top_5_display.rename(columns=col_mapping)
+    
+    final_cols = ['ID Empleado', 'Probabilidad de Renuncia', 'Departamento']
+    final_cols = [col for col in final_cols if col in top_5_display.columns]
+
+    st.dataframe(top_5_display[final_cols], hide_index=True)
+    
+    st.markdown("---")
+    
+    # --- 3. DESERCIÓN POR ÁREA (DEPARTMENT) ---
+    if 'Department' in df_results.columns:
+        st.subheader("Deserción Predicha por Departamento (Tasa de Renuncia)")
+        
+        attrition_by_department = df_results.groupby('Department')['Prediction_Renuncia'].mean() * 100
+        attrition_by_department = attrition_by_department.reset_index(name='Tasa_Desercion_Predicha')
+        
+        attrition_by_department['Tasa_Desercion_Predicha'] = attrition_by_department['Tasa_Desercion_Predicha'].map('{:.2f}%'.format)
+        attrition_by_department.columns = ['Departamento', 'Tasa de Deserción Predicha']
+        
+        st.dataframe(attrition_by_department.sort_values(by='Departamento'), hide_index=True)
+    else:
+        st.warning(f"No se encontró la columna 'Department' en los datos de {title_suffix.lower()} para análisis por área.")
+
+
+# ====================================
+# 8. Funciones de Recomendaciones
+# ====================================
+def display_recommendations(df_results):
+    st.markdown("---")
+    st.header("💡 Recomendaciones Estratégicas")
+
+    # Identificar el umbral de alto riesgo (ej. Probabilidad > 70%)
+    high_risk_threshold = 0.70
+    df_high_risk = df_results[df_results['Probabilidad_Renuncia'] > high_risk_threshold]
+    
+    if df_high_risk.empty:
+        st.success("El riesgo de deserción es bajo. Mantenga las políticas actuales.")
+        return
+
+    # 1. Recomendación a Nivel Individual (Intervención)
+    top_risk_count = min(10, len(df_high_risk))
+    st.subheader("1. Intervención Individual Prioritaria")
+    st.markdown(f"**Enfocarse en los {top_risk_count} empleados con la más alta probabilidad de renuncia** (Probabilidad > {high_risk_threshold * 100:.0f}%).")
+    st.info("Acción sugerida: Realizar entrevistas de retención confidenciales para entender sus preocupaciones y ofrecer soluciones personalizadas (aumento salarial, flexibilidad, cambio de rol, o mentoría).")
+
+    # 2. Recomendación a Nivel Departamental (Foco)
+    if 'Department' in df_high_risk.columns:
+        st.subheader("2. Foco Departamental")
+        # Calcular el departamento con la mayor cantidad de empleados en alto riesgo
+        risk_by_dept = df_high_risk.groupby('Department').size().sort_values(ascending=False)
+        top_risk_dept = risk_by_dept.index[0]
+        st.markdown(f"El departamento de **{top_risk_dept}** concentra el mayor número de empleados en alto riesgo ({risk_by_dept.iloc[0]} empleados).")
+        st.warning(f"Acción sugerida: Evaluar la carga de trabajo, la gestión de líderes y los niveles de satisfacción general del equipo en **{top_risk_dept}**. Implementar programas de soporte específicos para ese departamento.")
+
+    # 3. Recomendación a Nivel Global/Estratégico (Prevención)
+    st.subheader("3. Estrategia Global de Prevención")
+    if 'MonthlyIncome' in df_high_risk.columns:
+        avg_high_risk_income = df_high_risk['MonthlyIncome'].mean()
+        avg_total_income = df_results['MonthlyIncome'].mean()
+        
+        if avg_high_risk_income < avg_total_income * 0.9: # Si el ingreso promedio de riesgo es significativamente menor (ej. 10%)
+            st.markdown("Se observa una correlación entre el bajo **MonthlyIncome** y el alto riesgo de deserción.")
+            st.info("Acción sugerida: Revisar y ajustar la banda salarial para los roles de mayor riesgo, asegurando que el ingreso esté en línea o por encima del promedio del mercado para mitigar la insatisfacción salarial.")
+        else:
+            st.markdown("El riesgo no se concentra únicamente en bajos salarios.")
+            st.info("Acción sugerida: Implementar encuestas de clima laboral anónimas enfocadas en **Work-Life Balance** y **Job Satisfaction** para identificar otros factores no salariales que impulsan la renuncia.")
+
 # ============================
-# 7. Interfaz Streamlit
+# 9. Interfaz Streamlit
 # ============================
 def main():
     st.set_page_config(page_title="Predicción y Simulación de Renuncia", layout="wide")
@@ -304,61 +425,11 @@ def main():
             else:
                 st.warning("⚠️ El archivo cargado no tiene la columna 'Attrition'. Solo se muestran las predicciones.")
             
-            st.markdown("---")
-            st.subheader("Análisis de Deserción Predicha")
-
-            # --- 2. PORCENTAJE TOTAL DE DESERCIÓN (PREDICHO) ---
-            total_attrition_count = df_original['Prediction_Renuncia'].sum()
-            total_employees = len(df_original)
-            total_attrition_percentage = (total_attrition_count / total_employees) * 100
-
-            col3, col4 = st.columns(2)
-            col3.metric(
-                label="Porcentaje total de deserción (predicho)", 
-                value=f"{total_attrition_percentage:.2f}%", 
-                delta=f"{total_attrition_count} empleados",
-                delta_color="off"
-            )
-
-            # --- 3. TOP 5 EMPLEADOS CON MAYOR RIESGO ---
-            st.markdown("---")
-            st.subheader("🚨 Top 5 Empleados con Mayor Riesgo de Deserción")
-
-            employee_key = 'EmployeeNumber' if 'EmployeeNumber' in df_original.columns else 'Index'
-
-            # 3.1 Obtener los 5 empleados con mayor probabilidad
-            top_5_attrition = df_original.sort_values(by='Probabilidad_Renuncia', ascending=False).head(5)
-
-            # 3.2 Seleccionar solo las columnas clave para mostrar
-            cols_to_display = [employee_key, 'Probabilidad_Renuncia', 'Department']
+            # --- 2. ANÁLISIS EJECUTIVO ---
+            display_executive_analysis(df_original, title_suffix="Predicha")
             
-            # Asegurar que las columnas existan antes de seleccionarlas
-            top_5_display_cols = [col for col in cols_to_display if col in top_5_attrition.columns]
-            top_5_display = top_5_attrition[top_5_display_cols].copy()
-
-            # 3.3 Formatear la probabilidad para la tabla
-            top_5_display['Probabilidad_Renuncia'] = top_5_display['Probabilidad_Renuncia'].map('{:.4f}'.format)
-            top_5_display.columns = ['ID Empleado', 'Probabilidad de Renuncia', 'Departamento']
-
-            st.dataframe(top_5_display, hide_index=True)
-            
-            st.markdown("---")
-            
-            # --- 4. DESERCIÓN POR ÁREA (DEPARTMENT) ---
-            if 'Department' in df_original.columns:
-                st.subheader("Deserción Predicha por Departamento (Tasa de Renuncia)")
-                
-                # Calcular la media de 'Prediction_Renuncia' por departamento, lo cual es la tasa.
-                attrition_by_department = df_original.groupby('Department')['Prediction_Renuncia'].mean() * 100
-                attrition_by_department = attrition_by_department.reset_index(name='Tasa_Desercion_Predicha')
-                
-                # Formatear el porcentaje y ordenar
-                attrition_by_department['Tasa_Desercion_Predicha'] = attrition_by_department['Tasa_Desercion_Predicha'].map('{:.2f}%'.format)
-                attrition_by_department.columns = ['Departamento', 'Tasa de Deserción Predicha']
-                
-                st.dataframe(attrition_by_department.sort_values(by='Departamento'), hide_index=True)
-            else:
-                st.warning("No se encontró la columna 'Department' en los datos cargados para análisis por área.")
+            # --- 3. RECOMENDACIONES ---
+            display_recommendations(df_original)
 
             # --- BOTÓN DE DESCARGA ---
             st.download_button(
@@ -368,11 +439,10 @@ def main():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-    # --- Simulaciones (Sin cambios) ---
+    # --- Simulaciones ---
     st.divider()
     st.header("2. Análisis de Simulaciones (Robustez y Escenarios)")
 
-    # ... (Resto del código de simulaciones sin cambios) ...
     simulation_option = st.radio("Selecciona tipo de simulación:", ["Monte Carlo", "What-If"])
 
     if simulation_option == "Monte Carlo":
@@ -390,6 +460,29 @@ def main():
                 st.markdown(f"**Robustez - F1-score Media:** `{np.mean(simulated_f1):.4f}`")
                 plot_metrics(simulated_scores, simulated_f1)
                 
+                # --- ANÁLISIS EJECUTIVO DE MONTE CARLO (PRIMERA SIMULACIÓN) ---
+                st.subheader("Análisis Detallado de Escenario (Simulación 1)")
+                
+                # 1. Preprocesar la data de la primera simulación
+                sim_data_processed = preprocess_data(simulations[0], model_feature_columns, categorical_mapping, scaler)
+                
+                if sim_data_processed is not None:
+                    # 2. Ejecutar la predicción
+                    probabilidad_renuncia_sim = model.predict_proba(sim_data_processed)[:, 1]
+                    predictions_sim = (probabilidad_renuncia_sim > 0.5).astype(int)
+                    
+                    # 3. Combinar resultados con las features originales (df_reference_features tiene ID Empleado y Department)
+                    df_sim_results = df_reference_features.copy()
+                    df_sim_results['Prediction_Renuncia'] = predictions_sim
+                    df_sim_results['Probabilidad_Renuncia'] = probabilidad_renuncia_sim
+                    
+                    # 4. Mostrar análisis ejecutivo
+                    display_executive_analysis(df_sim_results, title_suffix="Simulación MC")
+
+                    # 5. RECOMENDACIONES
+                    display_recommendations(df_sim_results)
+
+                
     elif simulation_option == "What-If":
         st.markdown("Simula el impacto de un **aumento salarial del 10%** en la predicción de renuncia sobre la data de referencia.")
         if st.button("▶️ Ejecutar Simulación What-If (Aumento Salarial)"):
@@ -404,6 +497,27 @@ def main():
                 st.success("🎉 Simulación What-If Completada.")
                 st.markdown(f"**Impacto: Accuracy con +10% Salario:** `{simulated_scores[0]:.4f}`")
                 st.markdown(f"**Impacto: F1-score con +10% Salario:** `{simulated_f1[0]:.4f}`")
+                
+                # --- ANÁLISIS EJECUTIVO DE WHAT-IF ---
+                
+                # 1. Preprocesar la data de la única simulación
+                sim_data_processed = preprocess_data(simulations[0], model_feature_columns, categorical_mapping, scaler)
+                
+                if sim_data_processed is not None:
+                    # 2. Ejecutar la predicción
+                    probabilidad_renuncia_sim = model.predict_proba(sim_data_processed)[:, 1]
+                    predictions_sim = (probabilidad_renuncia_sim > 0.5).astype(int)
+                    
+                    # 3. Combinar resultados con las features originales (df_reference_features tiene ID Empleado y Department)
+                    df_sim_results = df_reference_features.copy()
+                    df_sim_results['Prediction_Renuncia'] = predictions_sim
+                    df_sim_results['Probabilidad_Renuncia'] = probabilidad_renuncia_sim
+                    
+                    # 4. Mostrar análisis ejecutivo
+                    display_executive_analysis(df_sim_results, title_suffix="Escenario What-If (+10% Salario)")
+                    
+                    # 5. RECOMENDACIONES
+                    display_recommendations(df_sim_results)
 
 # ============================
 # Inicio de la Aplicación
