@@ -83,7 +83,7 @@ def preprocess_data(df, model_columns, le_dict, scaler):
                 df_processed[col] = df_processed[col].apply(lambda x: x if x in le[col].classes_ else 'DESCONOCIDO')
                 
                 # Aplicar el LabelEncoder entrenado
-                df_processed[col] = le[col].transform(df_processed[col])  # Usamos el LE específico para cada columna
+                df_processed[col] = le_dict[col].transform(df_processed[col])  # Usamos el LE específico para cada columna
             except ValueError as e:
                 st.error(f"Error CRÍTICO en la codificación de la columna '{col}'. La cadena normalizada no existe en el LabelEncoder. Error: {e}")
                 return None
