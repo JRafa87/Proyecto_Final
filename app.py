@@ -16,9 +16,9 @@ def load_model():
     Carga el modelo entrenado, el label encoder, el scaler y la data de referencia.
     """
     try:
-        model = joblib.load('models/xgboost_model.pkl')
-        le = joblib.load('models/label_encoder.pkl')
-        scaler = joblib.load('models/scaler.pkl')
+        model = joblib.load('model/xgboost_model.pkl')
+        le = joblib.load('model/label_encoder.pkl')
+        scaler = joblib.load('model/scaler.pkl')
         
         REFERENCE_DATA_PATH = 'data/reference_data.csv'
         if not os.path.exists(REFERENCE_DATA_PATH):
