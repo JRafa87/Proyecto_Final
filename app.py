@@ -17,7 +17,7 @@ def load_model():
     """
     try:
         model = joblib.load('models/xgboost_model.pkl')
-        le = joblib.load('models/label_encoders.pkl')
+        le = joblib.load('models/label_encoder.pkl')
         scaler = joblib.load('models/scaler.pkl')
         
         REFERENCE_DATA_PATH = 'data/reference_data.csv'
@@ -48,7 +48,7 @@ def load_model():
 
 
 # ================================
-# 2. Funciones de Preprocesamiento (VERSIÓN FINAL: AISLAMIENTO Categórico)
+# 2. Funciones de Preprocesamiento
 # ================================
 def preprocess_data(df, model_columns, le, scaler):
     """
@@ -63,7 +63,7 @@ def preprocess_data(df, model_columns, le, scaler):
         st.error(f"❌ Error de datos: Faltan las siguientes columnas requeridas por el modelo: {', '.join(missing_columns)}")
         return None
 
-    # CRÍTICO: Reordenar el DataFrame según el orden estricto de model_columns
+    # Reordenar el DataFrame según el orden estricto de model_columns
     df_processed = df_processed[model_columns].copy()
 
     # 2. Eliminación de duplicados y rellenado de nulos
@@ -71,24 +71,22 @@ def preprocess_data(df, model_columns, le, scaler):
     numeric_cols_for_fillna = df_processed.select_dtypes(include=np.number).columns.tolist()
     df_processed[numeric_cols_for_fillna] = df_processed[numeric_cols_for_fillna].fillna(df_processed[numeric_cols_for_fillna].mean())
 
-    # 3. Codificación de variables categóricas (SOLO LAS NOMINALES QUE REQUIEREN LE)
-    # AISLAMIENTO: Estas son las únicas 7 columnas categóricas nominales de tu lista.
+    # 3. Codificación de variables categóricas
     nominal_categorical_cols = ['BusinessTravel', 'Department', 'EducationField', 'Gender', 'JobRole', 'MaritalStatus', 'OverTime']
     
     for col in nominal_categorical_cols:
         if col in df_processed.columns:
             try:
-                # Forzamos a MAYÚSCULAS (la forma más probable de que el encoder lo espere, dado los errores anteriores)
-                normalized_series = df_processed[col].astype(str).str.strip().str.upper() 
+                # Forzamos a mayúsculas o minúsculas, dependiendo del caso
+                df_processed[col] = df_processed[col].astype(str).str.strip().str.upper()
                 
-                df_processed[col] = normalized_series
+                # Filtramos categorías desconocidas y les asignamos un valor por defecto
+                df_processed[col] = df_processed[col].apply(lambda x: x if x in le[col].classes_ else 'DESCONOCIDO')
                 
                 # Aplicar el LabelEncoder entrenado
-                df_processed[col] = le.transform(df_processed[col])
+                df_processed[col] = le[col].transform(df_processed[col])  # Usamos el LE específico para cada columna
             except ValueError as e:
-                # Si esto falla, el LabelEncoder no tiene el valor normalizado.
                 st.error(f"Error CRÍTICO en la codificación de la columna '{col}'. La cadena normalizada no existe en el LabelEncoder. Error: {e}")
-                st.warning("Prueba cambiar '.str.upper()' a '.str.lower()' o '.str.capitalize()' si el error persiste.")
                 return None
     
     # 4. Escalado (Aplicado a TODAS las 36 features)
@@ -96,10 +94,8 @@ def preprocess_data(df, model_columns, le, scaler):
 
     try:
         df_processed[model_columns] = scaler.transform(df_to_scale)
-        
     except Exception as e:
-        st.error(f"Error durante el escalado de datos (Feature Match Error): {e}")
-        st.warning("El error indica que el orden o nombre de las columnas NO coincide con el 'scaler.pkl'.")
+        st.error(f"Error durante el escalado de datos: {e}")
         return None
 
     return df_processed
@@ -215,7 +211,7 @@ def plot_metrics(simulated_scores, simulated_f1):
 
 
 # ============================
-# 7. Interfaz de Streamlit (Alineación de Columnas)
+# 7. Interfaz de Streamlit
 # ============================
 def main():
     st.set_page_config(page_title="Predicción y Simulación de Renuncia", layout="wide")
@@ -226,8 +222,7 @@ def main():
     if model is None:
         return 
 
-    # 🟢 CRÍTICO: Definición explícita de las 36 features en el ORDEN EXACTO de entrenamiento.
-    # Esta lista incluye las 7 categóricas nominales y las 29 numéricas/ordinales.
+    # Definir las 36 features en el orden correcto
     model_feature_columns = [
         'Age', 'BusinessTravel', 'DailyRate', 'Department', 'DistanceFromHome',
         'Education', 'EducationField', 'EnvironmentSatisfaction', 'Gender', 'HourlyRate',
@@ -240,7 +235,6 @@ def main():
         'ConfianzaEmpresa', 'NumeroTardanzas', 'NumeroFaltas' 
     ]
     
-    # --- Columna para la carga de archivos y Predicción ---
     uploaded_file = st.file_uploader("Sube un archivo CSV o Excel (.csv, .xlsx) para PREDICCIÓN", type=["csv", "xlsx"])
     
     if uploaded_file is not None:
@@ -294,11 +288,10 @@ def main():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-    # --- Separador y Opciones de Simulación ---
+    # --- Simulaciones ---
     st.divider()
     st.header("2. Análisis de Simulaciones (Robustez y Escenarios)")
-    st.markdown("Las simulaciones se basan en el **dataset de referencia** para garantizar la evaluación.")
-    
+
     simulation_option = st.radio("Selecciona tipo de simulación:", ["Monte Carlo", "What-If"])
 
     if simulation_option == "Monte Carlo":
@@ -333,11 +326,13 @@ def main():
                 st.markdown(f"**Impacto: Accuracy con +10% Salario:** `{simulated_scores[0]:.4f}`")
                 st.markdown(f"**Impacto: F1-score con +10% Salario:** `{simulated_f1[0]:.4f}`")
 
+
 # ============================
 # Inicio de la Aplicación
 # ============================
 if __name__ == "__main__":
     main()
+
 
 
 
