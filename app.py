@@ -38,7 +38,9 @@ def load_model():
 
         true_labels_reference = df_reference['Attrition'].astype(int).copy()
         df_reference_features = df_reference.drop(columns=['Attrition']).copy()
-
+        
+        # Verificar que el modelo se cargó correctamente
+        st.success("✅ Modelo cargado correctamente.")
         return model, categorical_mapping, scaler, df_reference_features, true_labels_reference
 
     except FileNotFoundError:
