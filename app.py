@@ -17,7 +17,7 @@ def load_model():
     """
     try:
         model = joblib.load('models/xgboost_model.pkl')
-        le = joblib.load('models/label_encoder.pkl')
+        le = joblib.load('models/label_encoders.pkl')
         scaler = joblib.load('models/scaler.pkl')
         
         REFERENCE_DATA_PATH = 'data/reference_data.csv'
