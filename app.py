@@ -2,43 +2,47 @@ import pandas as pd
 import numpy as np
 import joblib
 import streamlit as st
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 import os
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import accuracy_score, f1_score
+import matplotlib.pyplot as plt
 
 # ==========================
 # 1. Cargar Modelos y Artefactos
 # ==========================
-@st.cache_resource 
+@st.cache_resource
 def load_model():
     """
-    Carga el modelo entrenado, el label encoder, el scaler y la data de referencia.
+    Carga el modelo entrenado, el diccionario de codificación, el scaler y la data de referencia.
     """
     try:
+        # Cargar modelos y artefactos
         model = joblib.load('models/xgboost_model.pkl')
-        le_dict = joblib.load('models/label_encoders.pkl')
+        categorical_mapping = joblib.load('models/categorical_mapping.pkl')  # Cargar el diccionario de codificación
+
         scaler = joblib.load('models/scaler.pkl')
-        
+
         REFERENCE_DATA_PATH = 'data/reference_data.csv'
         if not os.path.exists(REFERENCE_DATA_PATH):
-             st.error(f"Error: No se encontró la data de referencia en '{REFERENCE_DATA_PATH}'. Necesaria para evaluación de simulaciones.")
-             return None, None, None, None, None
-             
+            st.error(f"Error: No se encontró la data de referencia en '{REFERENCE_DATA_PATH}'. Necesaria para evaluación de simulaciones.")
+            return None, None, None, None, None
+
         df_reference = pd.read_csv(REFERENCE_DATA_PATH)
-        
+
         if 'Attrition' not in df_reference.columns:
             st.error("Error: La data de referencia debe contener la columna 'Attrition' para la evaluación.")
             return None, None, None, None, None
-            
+
         # Solución al error 'invalid literal for int(): 'Yes''
         df_reference['Attrition'] = df_reference['Attrition'].replace({'Yes': 1, 'No': 0})
-            
+
         true_labels_reference = df_reference['Attrition'].astype(int).copy()
         df_reference_features = df_reference.drop(columns=['Attrition']).copy()
 
-        return model, le_dict, scaler, df_reference_features, true_labels_reference
-        
+        return model, categorical_mapping, scaler, df_reference_features, true_labels_reference
+
     except FileNotFoundError:
-        st.error("Error: Archivos del modelo (xgboost_model.pkl, label_encoder.pkl, scaler.pkl) no encontrados. Asegúrate de que están en la carpeta 'models'.")
+        st.error("Error: Archivos del modelo (xgboost_model.pkl, categorical_mapping.pkl, scaler.pkl) no encontrados. Asegúrate de que están en la carpeta 'models'.")
         return None, None, None, None, None
     except Exception as e:
         st.error(f"Error al cargar artefactos o data de referencia: {e}")
@@ -48,10 +52,9 @@ def load_model():
 # ================================
 # 2. Funciones de Preprocesamiento
 # ================================
-def preprocess_data(df, model_columns, le_dict, scaler):
+def preprocess_data(df, model_columns, categorical_mapping, scaler):
     """
-    Preprocesa los datos, aplicando codificación solo a las 7 variables nominales,
-    y asegurando la alineación de columnas.
+    Preprocesa los datos, aplicando codificación usando el diccionario de categorías.
     """
     df_processed = df.copy()
 
@@ -69,27 +72,28 @@ def preprocess_data(df, model_columns, le_dict, scaler):
     numeric_cols_for_fillna = df_processed.select_dtypes(include=np.number).columns.tolist()
     df_processed[numeric_cols_for_fillna] = df_processed[numeric_cols_for_fillna].fillna(df_processed[numeric_cols_for_fillna].mean())
 
-    # 3. Codificación de variables categóricas
+    # 3. Codificación de variables categóricas usando el diccionario de mapeo
     nominal_categorical_cols = ['BusinessTravel', 'Department', 'EducationField', 'Gender', 'JobRole', 'MaritalStatus', 'OverTime']
-    
+
     for col in nominal_categorical_cols:
         if col in df_processed.columns:
             try:
-                # Forzamos a mayúsculas o minúsculas, dependiendo del caso
+                # Normalizamos los valores de texto
                 df_processed[col] = df_processed[col].astype(str).str.strip().str.upper()
-                
-                # Manejar categorías desconocidas: reemplazar con un valor predeterminado
-                # Si la categoría no está en el 'LabelEncoder', asignamos un valor numérico predeterminado
-                df_processed[col] = df_processed[col].apply(lambda x: x if x in le[col].classes_ else 'DESCONOCIDO')
-                
-                # Aplicar el LabelEncoder entrenado
-                df_processed[col] = le_dict[col].transform(df_processed[col])  # Usamos el LE específico para cada columna
-            except ValueError as e:
-                st.error(f"Error CRÍTICO en la codificación de la columna '{col}'. La cadena normalizada no existe en el LabelEncoder. Error: {e}")
+
+                # Aplicar el mapeo de codificación desde el diccionario
+                if col in categorical_mapping:
+                    df_processed[col] = df_processed[col].map(categorical_mapping[col])
+
+                # Si alguna categoría no está en el diccionario, asignar un valor por defecto (como 'DESCONOCIDO')
+                df_processed[col] = df_processed[col].fillna(categorical_mapping.get(col, {}).get('DESCONOCIDO', -1))
+
+            except KeyError as e:
+                st.error(f"Error en la codificación de la columna '{col}': No se encontró la categoría. Error: {e}")
                 return None
-    
-    # 4. Escalado (Aplicado a TODAS las 36 features)
-    df_to_scale = df_processed[model_columns] 
+
+    # 4. Escalado de los datos
+    df_to_scale = df_processed[model_columns]
 
     try:
         df_processed[model_columns] = scaler.transform(df_to_scale)
@@ -129,18 +133,18 @@ def what_if_simulation(df_features, perturbation_factor=1.10):
 # ============================
 # 4. Evaluación de Simulaciones
 # ============================
-def evaluate_simulations(simulated_datasets, true_labels_reference, model, le, scaler, model_feature_columns):
+def evaluate_simulations(simulated_datasets, true_labels_reference, model, categorical_mapping, scaler, model_feature_columns):
     """
     Evalúa el rendimiento de las simulaciones.
     """
     scores = []
     f1_scores = []
     
-    true_labels = true_labels_reference.values.astype(int) 
+    true_labels = true_labels_reference.values.astype(int)
 
     for sim_data in simulated_datasets:
         # La data simulada pasa por el preprocesamiento
-        sim_data_processed = preprocess_data(sim_data, model_feature_columns, le, scaler)
+        sim_data_processed = preprocess_data(sim_data, model_feature_columns, categorical_mapping, scaler)
         
         if sim_data_processed is None:
             st.warning("Preprocesamiento fallido en una simulación. Se detiene la evaluación.")
@@ -217,7 +221,7 @@ def main():
     st.title("📊 Modelo de Predicción y Simulación de Renuncia de Empleados")
     st.markdown("Carga tu archivo de datos para obtener predicciones. Las simulaciones usan una **data de referencia** cargada en el servidor para evaluación.")
 
-    model, le, scaler, df_reference_features, true_labels_reference = load_model()
+    model, categorical_mapping, scaler, df_reference_features, true_labels_reference = load_model()
     if model is None:
         return 
 
@@ -252,7 +256,7 @@ def main():
         df_features_uploaded = df_original.drop(columns=['Attrition'], errors='ignore').copy()
         
         # Se llama a preprocess_data con la lista estricta de columnas
-        processed_df = preprocess_data(df_features_uploaded, model_feature_columns, le, scaler)
+        processed_df = preprocess_data(df_features_uploaded, model_feature_columns, categorical_mapping, scaler)
         
         if processed_df is None:
             st.error("No se puede continuar con la predicción debido a un error de preprocesamiento en el archivo cargado.")
@@ -300,7 +304,7 @@ def main():
             simulations = monte_carlo_simulation(df_reference_features)
             
             simulated_scores, simulated_f1 = evaluate_simulations(
-                simulations, true_labels_reference, model, le, scaler, model_feature_columns
+                simulations, true_labels_reference, model, categorical_mapping, scaler, model_feature_columns
             )
 
             if simulated_scores:
@@ -317,7 +321,7 @@ def main():
             simulations = what_if_simulation(df_reference_features)
             
             simulated_scores, simulated_f1 = evaluate_simulations(
-                simulations, true_labels_reference, model, le, scaler, model_feature_columns
+                simulations, true_labels_reference, model, categorical_mapping, scaler, model_feature_columns
             )
             
             if simulated_scores:
@@ -333,10 +337,7 @@ if __name__ == "__main__":
     main()
 
 
-# Verificar qué clases ha aprendido cada LabelEncoder
-for col, le in le_dict.items():
-    st.write(f"\nCategorías aprendidas para '{col}':")
-    st.write(le.classes_)
+
 
 
 
