@@ -2,8 +2,6 @@ import pandas as pd
 import numpy as np
 import joblib
 import streamlit as st
-import matplotlib.pyplot as plt
-from sklearn.metrics import accuracy_score, f1_score
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 import os
 
@@ -80,7 +78,8 @@ def preprocess_data(df, model_columns, le, scaler):
                 # Forzamos a mayúsculas o minúsculas, dependiendo del caso
                 df_processed[col] = df_processed[col].astype(str).str.strip().str.upper()
                 
-                # Filtramos categorías desconocidas y les asignamos un valor por defecto
+                # Manejar categorías desconocidas: reemplazar con un valor predeterminado
+                # Si la categoría no está en el 'LabelEncoder', asignamos un valor numérico predeterminado
                 df_processed[col] = df_processed[col].apply(lambda x: x if x in le[col].classes_ else 'DESCONOCIDO')
                 
                 # Aplicar el LabelEncoder entrenado
@@ -211,7 +210,7 @@ def plot_metrics(simulated_scores, simulated_f1):
 
 
 # ============================
-# 7. Interfaz de Streamlit
+# 7. Interfaz de Streamlit (Alineación de Columnas)
 # ============================
 def main():
     st.set_page_config(page_title="Predicción y Simulación de Renuncia", layout="wide")
@@ -332,6 +331,7 @@ def main():
 # ============================
 if __name__ == "__main__":
     main()
+
 
 
 
