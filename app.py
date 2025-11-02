@@ -96,6 +96,34 @@ def preprocess_data(df, model_columns, categorical_mapping, scaler):
     # Finalmente, devolver el DataFrame solo con las columnas que el modelo espera y en el orden correcto
     return df_processed[model_columns]
 
+# ============================
+#  Funciones de Evaluación
+# ============================
+def check_class_imbalance(df, target_column='Attrition'):
+    class_counts = df[target_column].value_counts()
+    total_instances = len(df)
+    class_percentages = class_counts / total_instances * 100
+    if class_percentages.min() < 30:
+        return True
+    else:
+        return False
+
+def dynamic_threshold(probabilidad_renuncia, imbalance_detected):
+    if imbalance_detected:
+        threshold = 0.3  # Reduce el umbral en datos desbalanceados
+    else:
+        threshold = 0.5  # Mantén el umbral estándar
+
+    predictions = (probabilidad_renuncia > threshold).astype(int)
+    return predictions
+
+def evaluate_metrics(true_labels, predictions, imbalance_detected):
+    if imbalance_detected:
+        f1 = f1_score(true_labels, predictions, average='weighted')  # F1 ponderado para desbalanceo
+    else:
+        f1 = f1_score(true_labels, predictions, average='binary')
+    acc = accuracy_score(true_labels, predictions)
+    return acc, f1
 
 # ============================
 # 3. Simulaciones: Monte Carlo y What-If
@@ -403,10 +431,12 @@ def main():
         
         if st.button("🚀 Ejecutar Predicción y Evaluación"):
             st.info("Ejecutando el modelo sobre los datos cargados...")
+             
+            imbalance_detected = check_class_imbalance(df, target_column='Attrition')
 
             # --- EJECUTAR MODELO ---
             probabilidad_renuncia = model.predict_proba(processed_df)[:, 1]
-            predictions = (probabilidad_renuncia > 0.5).astype(int)
+            predictions = dynamic_threshold(probabilidad_renuncia, imbalance_detected)
             
             # Unir resultados a la data original
             df_original['Prediction_Renuncia'] = predictions
@@ -418,7 +448,7 @@ def main():
             if 'Attrition' in df_original.columns:
                 true_labels_uploaded = df_original['Attrition'].replace({'Yes': 1, 'No': 0}).astype(int)
                 acc = accuracy_score(true_labels_uploaded, predictions)
-                f1 = f1_score(true_labels_uploaded, predictions, zero_division=0)
+                f1 = f1_score(true_labels_uploaded, predictions, imbalance_detected)
                 st.success("✅ Predicción y Evaluación de datos cargados Completadas!")
                 col1.metric(label="Accuracy (Datos Cargados)", value=f"{acc:.4f}")
                 col2.metric(label="F1-score (Datos Cargados)", value=f"{f1:.4f}")
