@@ -6,3 +6,4 @@ matplotlib
 streamlit
 joblib
 openpyxl
+xlsxwriter
