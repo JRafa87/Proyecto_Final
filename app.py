@@ -17,7 +17,7 @@ def load_model():
     """
     try:
         model = joblib.load('models/xgboost_model.pkl')
-        le = joblib.load('models/label_encoder.pkl')
+        le = joblib.load('models/label_encoders.pkl')
         scaler = joblib.load('models/scaler.pkl')
         
         REFERENCE_DATA_PATH = 'data/reference_data.csv'
@@ -340,20 +340,6 @@ if __name__ == "__main__":
     main()
 
 
-# Asegurarse de que los archivos están correctamente cargados
-model_path = 'models/xgboost_model.pkl'
-le_path = 'models/label_encoder.pkl'
-scaler_path = 'models/scaler.pkl'
-
-if not os.path.exists(model_path):
-    st.error(f"Error: No se encontró el archivo '{model_path}'")
-if not os.path.exists(le_path):
-    st.error(f"Error: No se encontró el archivo '{le_path}'")
-if not os.path.exists(scaler_path):
-    st.error(f"Error: No se encontró el archivo '{scaler_path}'")
-
-# Puedes también verificar la ruta completa con os.path.abspath()
-print(f"Ruta absoluta del modelo: {os.path.abspath(model_path)}")
 
 
 
