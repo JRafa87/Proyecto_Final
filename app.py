@@ -15,7 +15,7 @@ def load_model():
     """
     try:
         model = joblib.load('models/xgboost_model.pkl')
-        le = joblib.load('models/label_encoders.pkl')
+        le_dict = joblib.load('models/label_encoders.pkl')
         scaler = joblib.load('models/scaler.pkl')
         
         REFERENCE_DATA_PATH = 'data/reference_data.csv'
@@ -35,7 +35,7 @@ def load_model():
         true_labels_reference = df_reference['Attrition'].astype(int).copy()
         df_reference_features = df_reference.drop(columns=['Attrition']).copy()
 
-        return model, le, scaler, df_reference_features, true_labels_reference
+        return model, le_dict, scaler, df_reference_features, true_labels_reference
         
     except FileNotFoundError:
         st.error("Error: Archivos del modelo (xgboost_model.pkl, label_encoder.pkl, scaler.pkl) no encontrados. Asegúrate de que están en la carpeta 'models'.")
@@ -48,7 +48,7 @@ def load_model():
 # ================================
 # 2. Funciones de Preprocesamiento
 # ================================
-def preprocess_data(df, model_columns, le, scaler):
+def preprocess_data(df, model_columns, le_dict, scaler):
     """
     Preprocesa los datos, aplicando codificación solo a las 7 variables nominales,
     y asegurando la alineación de columnas.
