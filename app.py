@@ -448,10 +448,18 @@ def main():
             if 'Attrition' in df_original.columns:
                 true_labels_uploaded = df_original['Attrition'].replace({'Yes': 1, 'No': 0}).astype(int)
                 acc = accuracy_score(true_labels_uploaded, predictions)
-                f1 = f1_score(true_labels_uploaded, predictions, imbalance_detected)
+
+                # Ajustar el tipo de cálculo F1 según el desbalance detectado
+                if imbalance_detected:
+                    f1 = f1_score(true_labels_uploaded, predictions, average='weighted', zero_division=0)
+                    st.warning("⚠️ Dataset desbalanceado detectado. Se usa F1 ponderado (weighted).")
+                else:
+                    f1 = f1_score(true_labels_uploaded, predictions, average='binary', zero_division=0)
+
                 st.success("✅ Predicción y Evaluación de datos cargados Completadas!")
                 col1.metric(label="Accuracy (Datos Cargados)", value=f"{acc:.4f}")
                 col2.metric(label="F1-score (Datos Cargados)", value=f"{f1:.4f}")
+
             else:
                 st.warning("⚠️ El archivo cargado no tiene la columna 'Attrition'. Solo se muestran las predicciones.")
             
