@@ -333,6 +333,10 @@ if __name__ == "__main__":
     main()
 
 
+# Verificar qué clases ha aprendido cada LabelEncoder
+for col, le in le_dict.items():
+    st.write(f"\nCategorías aprendidas para '{col}':")
+    st.write(le.classes_)
 
 
 
