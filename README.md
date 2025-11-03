@@ -19,9 +19,10 @@ La aplicación está desarrollada con Streamlit, utilizando modelos de Machine L
 │
 ├── requirements.txt           # Dependencias del proyecto
 └── README.md                  # Documentación del proyecto
-
+``` 
 
 ## 🧰 TECNOLOGÍAS UTILIZADAS
+
 
 **Lenguaje base:** Python 3.9+  
 **Framework web:** Streamlit  
@@ -31,8 +32,6 @@ La aplicación está desarrollada con Streamlit, utilizando modelos de Machine L
 - XGBoost  
 - Matplotlib  
 - Joblib / Pickle  
-
-
 
 
 ## 🧮 Interacción con la Aplicación
@@ -46,6 +45,7 @@ La aplicación está desarrollada con Streamlit, utilizando modelos de Machine L
 📊 Resultados: Visualiza métricas, tablas y gráficos del riesgo de deserción por empleado y por área.
 
 🧭 Recomendaciones: Muestra sugerencias automáticas sobre acciones de retención y prevención.
+
 
 ## 📈 Ejemplo de Uso
 
