@@ -21,17 +21,21 @@ La aplicación está desarrollada con Streamlit, utilizando modelos de Machine L
 └── README.md                  # Documentación del proyecto
 
 
-🧰 Tecnologías Utilizadas
+## 🧰 TECNOLOGÍAS UTILIZADAS
 
-Python 3.9+
-Streamlit
-Pandas / NumPy
-Scikit-learn
-XGBoost
-Matplotlib
-Joblib / Pickle
+**Lenguaje base:** Python 3.9+  
+**Framework web:** Streamlit  
+**Bibliotecas principales:**  
+- Pandas / NumPy  
+- Scikit-learn  
+- XGBoost  
+- Matplotlib  
+- Joblib / Pickle  
 
-🧮 Interacción con la Aplicación
+
+
+
+## 🧮 Interacción con la Aplicación
 
 📂 Carga de datos: Permite subir un archivo CSV o Excel con información de empleados.
 
@@ -43,7 +47,7 @@ Joblib / Pickle
 
 🧭 Recomendaciones: Muestra sugerencias automáticas sobre acciones de retención y prevención.
 
-📈 Ejemplo de Uso
+## 📈 Ejemplo de Uso
 
 Carga el archivo data/reference_data.csv o un dataset propio con tus empleados.
 
