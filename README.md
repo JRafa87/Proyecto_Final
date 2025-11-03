@@ -4,8 +4,9 @@ Este proyecto tiene como objetivo predecir la probabilidad de deserción de empl
 
 La aplicación está desarrollada con Streamlit, utilizando modelos de Machine Learning (XGBoost) y herramientas de análisis de datos.
 
-🏗️ Estructura del Proyecto
+## 🏗️ Estructura del Proyecto
 
+```text
 .
 ├── app.py                     # Aplicación principal de Streamlit
 ├── models/                    # Modelos entrenados y artefactos del pipeline
@@ -18,6 +19,7 @@ La aplicación está desarrollada con Streamlit, utilizando modelos de Machine L
 │
 ├── requirements.txt           # Dependencias del proyecto
 └── README.md                  # Documentación del proyecto
+
 
 🧰 Tecnologías Utilizadas
 
