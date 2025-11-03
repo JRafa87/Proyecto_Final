@@ -1,47 +1,52 @@
 # Proyecto_Final
 
-Este proyecto tiene como objetivo predecir la probabilidad de deserción de empleados, generar simulaciones y ofrecer recomendaciones basadas en los resultados obtenidos.
+Este proyecto tiene como objetivo predecir la probabilidad de deserción de empleados, generar simulaciones de escenarios (Monte Carlo / What-If) y ofrecer recomendaciones estratégicas basadas en los resultados obtenidos.
 
-Estructura del Proyecto
+La aplicación está desarrollada con Streamlit, utilizando modelos de Machine Learning (XGBoost) y herramientas de análisis de datos.
 
-La estructura de carpetas es la siguiente:
+🏗️ Estructura del Proyecto
 
 .
-├── app.py                  # Archivo principal para ejecutar el pipeline con Streamlit
-├── models/                 # Carpeta con los modelos entrenados y artefactos
-│   ├── xgboost_model.pkl   # Modelo XGBoost entrenado
-│   ├── scaler.pkl          # Scaler para normalizar las características
-│   ├── categorical_mapping.pkl  # Mapeo de categorías para variables
-├── data/                   # Carpeta con los datasets y datos de referencia
-│   └── reference_data.csv  # Datos de referencia para simulaciones
-├── requirements.txt        # Archivo de dependencias del proyecto
-└── README.md               # Este archivo de documentación
+├── app.py                     # Aplicación principal de Streamlit
+├── models/                    # Modelos entrenados y artefactos del pipeline
+│   ├── xgboost_model.pkl      # Modelo XGBoost entrenado
+│   ├── scaler.pkl             # Scaler para normalizar las variables
+│   ├── categorical_mapping.pkl # Mapeo de categorías para variables
+│
+├── data/                      # Datasets y datos de referencia
+│   └── reference_data.csv     # Datos de referencia para simulaciones
+│
+├── requirements.txt           # Dependencias del proyecto
+└── README.md                  # Documentación del proyecto
 
-Instrucciones de Uso
+🧰 Tecnologías Utilizadas
 
-Instalar las dependencias:
+Python 3.9+
+Streamlit
+Pandas / NumPy
+Scikit-learn
+XGBoost
+Matplotlib
+Joblib / Pickle
 
-El proyecto requiere las siguientes librerías de Python:
+🧮 Interacción con la Aplicación
 
-pandas
-numpy
-joblib
-streamlit
-sklearn
-matplotlib
+📂 Carga de datos: Permite subir un archivo CSV o Excel con información de empleados.
 
-Ejecutar el pipeline:
+🔮 Predicción: Calcula la probabilidad de renuncia para cada empleado según las variables cargadas.
 
-Inicia la aplicación de Streamlit ejecutando:
+🎲 Simulaciones: Ejecuta escenarios “What-If” o simulaciones Monte Carlo para evaluar estrategias.
 
-streamlit run app.py
+📊 Resultados: Visualiza métricas, tablas y gráficos del riesgo de deserción por empleado y por área.
 
-La interfaz de Streamlit te permitirá cargar un archivo CSV o Excel con los datos de los empleados y ejecutar las predicciones y simulaciones.
+🧭 Recomendaciones: Muestra sugerencias automáticas sobre acciones de retención y prevención.
 
-Interacción:
+📈 Ejemplo de Uso
 
-Puedes cargar datos externos para realizar predicciones.
+Carga el archivo data/reference_data.csv o un dataset propio con tus empleados.
 
-Ejecutar simulaciones de Monte Carlo o What-If para evaluar escenarios alternativos.
+Visualiza las probabilidades de deserción generadas por el modelo.
 
-Las recomendaciones sobre los empleados con mayor riesgo de deserción se mostrarán en la interfaz, así como análisis ejecutivos por área.
+Ejecuta simulaciones para analizar el impacto de cambios en factores clave (por ejemplo: salario, satisfacción, horas extras).
+
+Exporta los resultados y gráficos generados para análisis posterior.
